@@ -80,6 +80,64 @@ def get_rating(product_id: int) -> str:
 
 
 @tool
+def get_order_history() -> str:
+    """
+    Retrieve the history of all orders placed by the user.
+    Returns a JSON array of orders, each containing: id, product_id, product_name, price, ordered_at.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, product_id, product_name, price, ordered_at FROM orders ORDER BY ordered_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    orders = [
+        {
+            "id": row[0],
+            "product_id": row[1],
+            "product_name": row[2],
+            "price": row[3],
+            "ordered_at": row[4]
+        }
+        for row in rows
+    ]
+    return json.dumps(orders)
+
+
+@tool
+def get_user_preferences_tool() -> str:
+    """
+    Retrieve all saved user preferences (such as organic preference or price limits).
+    Returns a JSON object containing keys like 'prefers_organic', 'max_price', etc.
+    Always call this at the beginning of the conversation if you haven't already.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS user_preferences (pref_key TEXT PRIMARY KEY, pref_value TEXT)")
+    cursor.execute("SELECT pref_key, pref_value FROM user_preferences")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    prefs = {row[0]: row[1] for row in rows}
+    return json.dumps(prefs)
+
+
+@tool
+def save_user_preference(pref_key: str, pref_value: str) -> str:
+    """
+    Save or update a user preference (e.g. key='prefers_organic' value='True', key='max_price' value='20').
+    Use this when the user explicitly expresses a general preference (e.g., 'I only buy organic', 'My budget is always under $20').
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS user_preferences (pref_key TEXT PRIMARY KEY, pref_value TEXT)")
+    cursor.execute("INSERT OR REPLACE INTO user_preferences (pref_key, pref_value) VALUES (?, ?)", (pref_key, pref_value))
+    conn.commit()
+    conn.close()
+    return f"Preference '{pref_key}' saved as '{pref_value}'."
+
+
+@tool
 def checkout(product_id: int) -> str:
     """
     Place an order for the given product ID. Saves the order to the database and returns
@@ -144,21 +202,58 @@ def describe_product_image(image_path: str) -> str:
     return response.content
 
 
+def is_shopping_related(user_message: str) -> bool:
+    """
+    Classify whether a user message is shopping-related or not.
+    Returns True if it is, False if it is off-topic.
+    """
+    if user_message.startswith("I uploaded a product image"):
+        return True
+
+    prompt = (
+        "You are an input guardrail for a shopping assistant.\n"
+        "Your task is to classify whether the user's message is related to shopping, products, orders, "
+        "reviews, store items, or shopping preferences.\n\n"
+        f"User Message: \"{user_message}\"\n\n"
+        "Respond with ONLY 'yes' or 'no'. Do not include any punctuation, explanation, or extra words."
+    )
+    try:
+        response = llm.invoke(prompt)
+        decision = response.content.strip().lower()
+        return "yes" in decision
+    except Exception:
+        return True
+
+
 # ---------------------------------------------------------------------------
 # Agent
 # ---------------------------------------------------------------------------
 
 agent = create_agent(
-    tools=[search_products, get_rating, checkout, describe_product_image],
+    tools=[
+        search_products,
+        get_rating,
+        checkout,
+        describe_product_image,
+        get_order_history,
+        get_user_preferences_tool,
+        save_user_preference
+    ],
     model=llm,
     system_prompt=(
         "You are a helpful shopping assistant. Follow these rules strictly.\n\n"
+        "USER PREFERENCES:\n"
+        "1. Always check for saved user preferences at the start of a conversation or before a search using get_user_preferences_tool.\n"
+        "2. Apply these saved preferences (e.g., preferring organic products or maximum price limit) to search_products automatically unless the user explicitly overrides them.\n"
+        "3. When the user explicitly mentions a preference (e.g., 'I always buy organic', 'my limit is $20', 'never show me things over $15'), call save_user_preference to save it for future sessions.\n\n"
+        "ORDER HISTORY:\n"
+        "1. When the user asks about their previous orders, what they have bought before, or order history, call get_order_history to fetch and list their orders.\n\n"
         "IMAGE SEARCH — when the user provides an image path:\n"
         "1. Call describe_product_image with the path to identify the product.\n"
         "2. Use the returned search_query and is_organic to call search_products.\n"
         "3. Continue with the BROWSING flow from step 2 onwards.\n\n"
         "BROWSING — when the user describes what they want to buy:\n"
-        "1. Call search_products to find matching items (apply any price/organic filters given).\n"
+        "1. Call search_products to find matching items (apply any price/organic filters given, as well as saved preferences).\n"
         "2. For each candidate, call get_rating to retrieve its average rating.\n"
         "3. Filter by the user's minimum rating if specified.\n"
         "4. Present qualifying products as a numbered list. For each item use this exact format "

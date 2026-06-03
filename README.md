@@ -12,6 +12,9 @@ This application allows users to search for products in a local database using t
 - **Shop by Image (Vision)**: Upload an image of a product, and the assistant will analyze it using a multimodal vision model to search the store for matching items.
 - **Rating Lookup**: Automatically retrieves average reviews and ratings for matched products.
 - **Simulated Checkout**: Place orders directly through the chat. The assistant will ask for confirmation before modifying the database.
+- **Persistent Personalization**: Automatically remembers user preferences (such as organic preferences or price limits) across sessions.
+- **Order History Memory**: Lets you query and view all your previously placed orders by asking *"what have I ordered before?"*.
+- **Input Guardrails**: Intercepts and politely redirects off-topic queries (e.g., poetry, general knowledge) to protect the LLM and prevent token wastage.
 
 ---
 
@@ -71,10 +74,21 @@ streamlit run app.py
 
 ## 📁 File Structure
 
-- `app.py`: The Streamlit web UI.
-- `shopping_agent.py`: Agent logic, LangChain tool definitions, and LLM configuration.
+- `app.py`: The Streamlit web UI with safety guardrails and rate-limit retry protection.
+- `shopping_agent.py`: Agent logic, LangChain tool definitions, preference database logic, and LLM configuration.
 - `reviews_api.py`: Python interface to query product reviews from the SQLite database.
-- `setup_db.py`: Database initialization script containing sample products and reviews.
+- `setup_db.py`: Database initialization script containing sample products, reviews, and preference table creations.
+- `run_evals.py`: Automated evaluation script for testing tool call accuracy and response quality using an LLM-as-judge with rate-limit recovery.
 - `resources/`: Folder containing example images for image search.
 - `.gitignore`: Specifies files that Git should ignore (e.g., virtual environments, database files, and `.env` files containing API keys).
 - `requirements.txt`: Python package dependencies.
+
+---
+
+## 🧪 Running Evaluations
+
+To run the automated evaluation test suite verifying tool call accuracy and response quality:
+```bash
+python run_evals.py
+```
+

@@ -41,6 +41,13 @@ def create_database():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_preferences (
+            pref_key TEXT PRIMARY KEY,
+            pref_value TEXT
+        )
+    """)
+
     products = [
         # --- Honey (8) ---
         (1,  "Organic Raw Honey",            "honey",        14.99, "Pure organic raw honey, unfiltered and cold-pressed",                1),

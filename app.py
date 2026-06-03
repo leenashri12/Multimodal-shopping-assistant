@@ -1,9 +1,33 @@
 import os
 import tempfile
+import time
 
 import streamlit as st
 
-from shopping_agent import agent
+from shopping_agent import agent, is_shopping_related
+
+
+def invoke_agent_safely(messages: list) -> str:
+    retry_delay = 5
+    for attempt in range(3):
+        try:
+            result = agent.invoke({"messages": messages})
+            return result["messages"][-1].content.replace("`", "")
+        except Exception as e:
+            err_msg = str(e)
+            if "rate_limit_exceeded" in err_msg or "429" in err_msg:
+                if attempt == 2:  # Last attempt failed, return user-friendly notice
+                    return (
+                        "⚠️ **Shopping Assistant is Busy (Rate Limit Reached)**: "
+                        "The Groq API is experiencing a high volume of requests. "
+                        "Please wait 10-15 seconds and try again!"
+                    )
+                time.sleep(retry_delay)
+                retry_delay += 5
+            else:
+                return f"⚠️ **Error**: {err_msg}"
+    return "⚠️ **Error**: Failed to contact the AI assistant."
+
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -63,8 +87,7 @@ if (
 ):
     with st.chat_message("assistant"):
         with st.spinner("Analyzing image and searching…"):
-            result = agent.invoke({"messages": st.session_state.messages})
-            response = result["messages"][-1].content.replace("`", "")
+            response = invoke_agent_safely(st.session_state.messages)
         st.markdown(response.replace("$", r"\$"))
 
     st.session_state.messages.append({"role": "assistant", "content": response})
@@ -81,8 +104,14 @@ if prompt := st.chat_input("e.g. I want organic honey under $15 with 4+ rating")
 
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
-            result = agent.invoke({"messages": st.session_state.messages})
-            response = result["messages"][-1].content.replace("`", "")
+            if not is_shopping_related(prompt):
+                response = (
+                    "I'm sorry, I can only help you with shopping-related queries, "
+                    "such as searching for products, checking ratings, viewing your order history, "
+                    "or placing orders. Let me know what you'd like to shop for!"
+                )
+            else:
+                response = invoke_agent_safely(st.session_state.messages)
         st.markdown(response.replace("$", r"\$"))
 
     st.session_state.messages.append({"role": "assistant", "content": response})
