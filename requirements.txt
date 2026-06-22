@@ -3,3 +3,7 @@ python-dotenv
 langchain
 langchain-core
 langchain-groq
+faiss-cpu
+sentence-transformers
+langchain-community
+

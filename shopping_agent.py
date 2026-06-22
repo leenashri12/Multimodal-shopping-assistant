@@ -19,6 +19,21 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "store.db")
 llm = ChatGroq(model="qwen/qwen3-32b", temperature=0)
 vision_llm = ChatGroq(model="meta-llama/llama-4-scout-17b-16e-instruct", temperature=0)
 
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+
+# Initialize local FAISS vector database
+DB_DIR = os.path.dirname(os.path.abspath(__file__))
+FAISS_INDEX_PATH = os.path.join(DB_DIR, "faiss_index")
+embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+vector_store = None
+if os.path.exists(FAISS_INDEX_PATH):
+    try:
+        vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings_model, allow_dangerous_deserialization=True)
+    except Exception as e:
+        print(f"Warning: Failed to load FAISS index: {e}")
+
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -138,6 +153,32 @@ def save_user_preference(pref_key: str, pref_value: str) -> str:
 
 
 @tool
+def search_policy_and_faq(query: str) -> str:
+    """
+    Search the store's unstructured guidelines, return policy, shipping rates, and product care guidelines.
+    Use this tool when the user asks questions about return policies, refund durations, shipping costs,
+    support email, business hours, shipping destinations, or how to store/care for products like honey, oil, tea, coffee, nuts, seeds, and milk.
+    """
+    global vector_store
+    # Try reloading vector store dynamically in case it was created after startup
+    if vector_store is None and os.path.exists(FAISS_INDEX_PATH):
+        try:
+            vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings_model, allow_dangerous_deserialization=True)
+        except Exception:
+            pass
+
+    if not vector_store:
+        return (
+            "Error: Vector database FAQ and policy index is not loaded. "
+            "Please run 'python setup_vector_db.py' to generate the index first."
+        )
+
+    # Perform semantic similarity search (retrieve top 2 matching chunks)
+    docs = vector_store.similarity_search(query, k=2)
+    return "\n\n".join([doc.page_content for doc in docs])
+
+
+@tool
 def checkout(product_id: int) -> str:
     """
     Place an order for the given product ID. Saves the order to the database and returns
@@ -237,7 +278,8 @@ agent = create_agent(
         describe_product_image,
         get_order_history,
         get_user_preferences_tool,
-        save_user_preference
+        save_user_preference,
+        search_policy_and_faq
     ],
     model=llm,
     system_prompt=(
@@ -248,6 +290,9 @@ agent = create_agent(
         "3. When the user explicitly mentions a preference (e.g., 'I always buy organic', 'my limit is $20', 'never show me things over $15'), call save_user_preference to save it for future sessions.\n\n"
         "ORDER HISTORY:\n"
         "1. When the user asks about their previous orders, what they have bought before, or order history, call get_order_history to fetch and list their orders.\n\n"
+        "STORE POLICIES & CARE GUIDELINES (RAG):\n"
+        "1. When the user asks about shipping times, shipping costs, support emails, customer support hours, return policies, refund timelines, or product care/storage guidelines (e.g. how to store honey, cooking oil, coffee, tea, nuts, or milk), call search_policy_and_faq to get the accurate information.\n"
+        "2. Answer the user's policy or care question using ONLY the facts retrieved by the tool. Be direct and friendly.\n\n"
         "IMAGE SEARCH — when the user provides an image path:\n"
         "1. Call describe_product_image with the path to identify the product.\n"
         "2. Use the returned search_query and is_organic to call search_products.\n"
@@ -266,10 +311,11 @@ agent = create_agent(
         "6. Do NOT call checkout at this stage.\n\n"
         "ORDERING — when the user confirms they want to buy (e.g. 'yes', 'sure', 'go ahead', "
         "'order number 2', 'the first one', 'get me #3'):\n"
-        "1. Look at your previous message to find the (ID:X) for the chosen product "
+        "1. Never place an order directly from the user's initial message. Even if the user says 'I want to order X' in their first query, you must first search the catalog, display the item in the standard numbered list, and ask for verification. Only call checkout when the user confirms with 'yes' or confirms a listed item number.\n"
+        "2. Look at your previous message to find the (ID:X) for the chosen product "
         "   (if only one was listed and the user says 'yes', use that product's ID).\n"
-        "2. Call checkout with that product_id (the number from (ID:X)).\n"
-        "3. Confirm the order to the user in plain text.\n\n"
+        "3. Call checkout with that product_id (the number from (ID:X)).\n"
+        "4. Confirm the order to the user in plain text.\n\n"
         "Never place an order unless the user explicitly confirms. "
         "Never guess a product_id — always take it from the (ID:X) in your own previous message."
     ),

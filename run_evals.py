@@ -109,6 +109,11 @@ TOOL_ACCURACY_TEST_CASES = [
         "expected_args": {
             "product_id": 1
         }
+    },
+    {
+        "query": "do you ship to alaska?",
+        "expected_tool": "search_policy_and_faq",
+        "expected_args": {}
     }
 ]
 
