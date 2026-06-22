@@ -211,6 +211,8 @@ def create_database():
         (32, 3.5, "Zola",   "Decent soy milk, nothing special."),
     ]
     cursor.execute("DELETE FROM reviews")
+    cursor.execute("DELETE FROM user_preferences")
+    cursor.execute("DELETE FROM orders")
     cursor.executemany(
         "INSERT INTO reviews (product_id, rating, reviewer_name, review_text) VALUES (?, ?, ?, ?)",
         reviews,
