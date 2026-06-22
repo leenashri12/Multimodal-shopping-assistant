@@ -16,23 +16,37 @@ load_dotenv()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "store.db")
 
-llm = ChatGroq(model="qwen/qwen3-32b", temperature=0)
+llm = ChatGroq(model="qwen/qwen3-32b", temperature=0, max_retries=6)
 vision_llm = ChatGroq(model="meta-llama/llama-4-scout-17b-16e-instruct", temperature=0)
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+# LangChain FAISS and HuggingFaceEmbeddings are lazy-imported to speed up Streamlit re-execution
 
-# Initialize local FAISS vector database
+# Paths for vector index
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
 FAISS_INDEX_PATH = os.path.join(DB_DIR, "faiss_index")
-embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
+# Lazy loading helpers to prevent loading PyTorch weights on every import
+embeddings_model = None
 vector_store = None
-if os.path.exists(FAISS_INDEX_PATH):
-    try:
-        vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings_model, allow_dangerous_deserialization=True)
-    except Exception as e:
-        print(f"Warning: Failed to load FAISS index: {e}")
+
+def get_embeddings_model():
+    global embeddings_model
+    if embeddings_model is None:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    return embeddings_model
+
+def get_vector_store():
+    global vector_store
+    if vector_store is None:
+        if os.path.exists(FAISS_INDEX_PATH):
+            try:
+                from langchain_community.vectorstores import FAISS
+                model = get_embeddings_model()
+                vector_store = FAISS.load_local(FAISS_INDEX_PATH, model, allow_dangerous_deserialization=True)
+            except Exception as e:
+                print(f"Warning: Failed to load FAISS index: {e}")
+    return vector_store
 
 
 # ---------------------------------------------------------------------------
@@ -45,26 +59,35 @@ def search_products(query: str, max_price: Optional[float] = None, is_organic: O
     Search the product database by keyword (matched against name, description, and category).
     Optionally filter by maximum price and/or organic status.
     Returns a JSON array of matching products, each with: id, name, category, price,
-    description, is_organic.
+    description, is_organic, average_rating, review_count.
     """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    sql = "SELECT id, name, category, price, description, is_organic FROM products WHERE 1=1"
+    sql = """
+        SELECT p.id, p.name, p.category, p.price, p.description, p.is_organic,
+               AVG(r.rating) as average_rating,
+               COUNT(r.id) as review_count
+        FROM products p
+        LEFT JOIN reviews r ON p.id = r.product_id
+        WHERE 1=1
+    """
     params: list = []
 
     if query:
-        sql += " AND (name LIKE ? OR description LIKE ? OR category LIKE ?)"
+        sql += " AND (p.name LIKE ? OR p.description LIKE ? OR p.category LIKE ?)"
         like = f"%{query}%"
         params.extend([like, like, like])
 
     if max_price is not None:
-        sql += " AND price <= ?"
+        sql += " AND p.price <= ?"
         params.append(max_price)
 
     if is_organic is not None:
-        sql += " AND is_organic = ?"
+        sql += " AND p.is_organic = ?"
         params.append(1 if is_organic else 0)
+
+    sql += " GROUP BY p.id"
 
     cursor.execute(sql, params)
     rows = cursor.fetchall()
@@ -72,12 +95,14 @@ def search_products(query: str, max_price: Optional[float] = None, is_organic: O
 
     products = [
         {
-            "id":          row[0],
-            "name":        row[1],
-            "category":    row[2],
-            "price":       row[3],
-            "description": row[4],
-            "is_organic":  bool(row[5]),
+            "id":             row[0],
+            "name":           row[1],
+            "category":       row[2],
+            "price":          row[3],
+            "description":    row[4],
+            "is_organic":     bool(row[5]),
+            "average_rating": round(row[6], 2) if row[6] is not None else 0.0,
+            "review_count":   row[7] if row[7] is not None else 0,
         }
         for row in rows
     ]
@@ -159,22 +184,15 @@ def search_policy_and_faq(query: str) -> str:
     Use this tool when the user asks questions about return policies, refund durations, shipping costs,
     support email, business hours, shipping destinations, or how to store/care for products like honey, oil, tea, coffee, nuts, seeds, and milk.
     """
-    global vector_store
-    # Try reloading vector store dynamically in case it was created after startup
-    if vector_store is None and os.path.exists(FAISS_INDEX_PATH):
-        try:
-            vector_store = FAISS.load_local(FAISS_INDEX_PATH, embeddings_model, allow_dangerous_deserialization=True)
-        except Exception:
-            pass
-
-    if not vector_store:
+    v_store = get_vector_store()
+    if not v_store:
         return (
             "Error: Vector database FAQ and policy index is not loaded. "
             "Please run 'python setup_vector_db.py' to generate the index first."
         )
 
     # Perform semantic similarity search (retrieve top 2 matching chunks)
-    docs = vector_store.similarity_search(query, k=2)
+    docs = v_store.similarity_search(query, k=2)
     return "\n\n".join([doc.page_content for doc in docs])
 
 
@@ -251,6 +269,19 @@ def is_shopping_related(user_message: str) -> bool:
     if user_message.startswith("I uploaded a product image"):
         return True
 
+    # Simple check for common greeting words/phrases to prevent blocking them
+    cleaned = user_message.strip().lower().rstrip("?.!")
+    greetings = {"hi", "hello", "hey", "hola", "greetings", "good morning", "good afternoon", "good evening", "howdy", "sup"}
+    conversational = {"how are you", "who are you", "what can you do", "what are you", "help", "menu", "info"}
+    
+    if (
+        cleaned in greetings 
+        or cleaned in conversational
+        or any(cleaned.startswith(g + " ") for g in greetings)
+        or any(cleaned.startswith(c + " ") for c in conversational)
+    ):
+        return True
+
     prompt = (
         "You are an input guardrail for a shopping assistant.\n"
         "Your task is to classify whether the user's message is related to shopping, products, orders, "
@@ -270,7 +301,20 @@ def is_shopping_related(user_message: str) -> bool:
 # Agent
 # ---------------------------------------------------------------------------
 
-agent = create_agent(
+def get_user_preferences_from_db() -> dict:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE IF NOT EXISTS user_preferences (pref_key TEXT PRIMARY KEY, pref_value TEXT)")
+        cursor.execute("SELECT pref_key, pref_value FROM user_preferences")
+        rows = cursor.fetchall()
+        conn.close()
+        return {row[0]: row[1] for row in rows}
+    except Exception:
+        return {}
+
+
+_agent_compiled = create_agent(
     tools=[
         search_products,
         get_rating,
@@ -285,7 +329,7 @@ agent = create_agent(
     system_prompt=(
         "You are a helpful shopping assistant. Follow these rules strictly.\n\n"
         "USER PREFERENCES:\n"
-        "1. Always check for saved user preferences at the start of a conversation or before a search using get_user_preferences_tool.\n"
+        "1. Check the system instructions or conversation context (SystemMessage) for saved user preferences. If they are already provided, apply them (e.g. prefers_organic='True' means only search for organic products unless overridden). Otherwise, call get_user_preferences_tool to fetch them.\n"
         "2. Apply these saved preferences (e.g., preferring organic products or maximum price limit) to search_products automatically unless the user explicitly overrides them.\n"
         "3. When the user explicitly mentions a preference (e.g., 'I always buy organic', 'my limit is $20', 'never show me things over $15'), call save_user_preference to save it for future sessions.\n\n"
         "ORDER HISTORY:\n"
@@ -299,7 +343,7 @@ agent = create_agent(
         "3. Continue with the BROWSING flow from step 2 onwards.\n\n"
         "BROWSING — when the user describes what they want to buy:\n"
         "1. Call search_products to find matching items (apply any price/organic filters given, as well as saved preferences).\n"
-        "2. For each candidate, call get_rating to retrieve its average rating.\n"
+        "2. Note: search_products already returns average_rating and review_count. You do NOT need to call get_rating separately for each search result candidate. Only call get_rating if you need to double-check ratings or if specifically asked for rating details.\n"
         "3. Filter by the user's minimum rating if specified.\n"
         "4. Present qualifying products as a numbered list. For each item use this exact format "
         "   (plain text, no backticks, no code blocks, no bold, no italic):\n\n"
@@ -320,6 +364,18 @@ agent = create_agent(
         "Never guess a product_id — always take it from the (ID:X) in your own previous message."
     ),
 )
+
+
+class PreferencesWrapper:
+    def invoke(self, input_dict: dict, config=None):
+        prefs = get_user_preferences_from_db()
+        messages = input_dict.get("messages", [])
+        pref_context = f"Saved User Preferences: {json.dumps(prefs)}"
+        new_messages = [{"role": "system", "content": pref_context}] + messages
+        return _agent_compiled.invoke({"messages": new_messages}, config)
+
+
+agent = PreferencesWrapper()
 
 if __name__ == "__main__":
     result = agent.invoke(
