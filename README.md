@@ -22,6 +22,25 @@ The project combines tool calling, RAG, multimodal search, memory, and automated
 
 ---
 
+## Architecture
+
+```text
+User
+  ↓
+Streamlit UI
+  ↓
+LangChain Agent
+  ├── Product Search Tool
+  ├── Ratings Tool
+  ├── Checkout Tool
+  ├── Memory Tool
+  └── RAG Retrieval Tool
+  ↓
+SQLite + FAISS
+```
+
+---
+
 ## 📦 What is in the Project
 
 The codebase consists of:
