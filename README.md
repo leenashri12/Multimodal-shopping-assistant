@@ -1,6 +1,6 @@
-# AI Shopping Assistant
+# Multimodal AI Shopping Assistant
 
-This is a local Python project that implements a basic AI shopping assistant using Streamlit, LangChain, and Groq LLMs. It features product searches, customer ratings, simulated order placement, user preferences memory, and policy lookups using local Vector RAG.
+This project implements a multimodal AI shopping assistant using Streamlit, LangChain, Groq LLMs, SQLite, and FAISS. It supports natural language product search, image-based product discovery, customer rating retrieval, simulated order placement, persistent user preferences, and policy lookups through a local RAG pipeline.
 
 ---
 
@@ -8,20 +8,17 @@ This is a local Python project that implements a basic AI shopping assistant usi
 
 I wanted to explore how LLM agents can interact with structured databases and retrieval systems instead of only generating text.
 
-The project combines tool calling, RAG, multimodal search, memory, and evaluation workflows in a simple shopping assistant application.
+The project combines tool calling, RAG, multimodal search, memory, and automated evaluation to explore practical agentic AI workflows.
 
 ---
 
 ## Demo
 
-### Chat Interface
+### Chat Interface & Ordering Flow
 ![Chat Interface](resources/chat_interface.png)
 
-### Image Search
+### Multimodal Image Search
 ![Image Search](resources/image_search.png)
-
-### Product Recommendations
-![Product Recommendations](resources/product_recommendations.png)
 
 ---
 
