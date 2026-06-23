@@ -116,9 +116,4 @@ python run_evals.py
 
 ---
 
-## Current Limitations
 
-- Product search uses a small local catalog (32 products)
-- No user authentication
-- Orders are simulated and not connected to payment systems
-- Memory is stored locally using SQLite
