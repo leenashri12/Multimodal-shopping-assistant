@@ -75,9 +75,23 @@ def search_products(query: str, max_price: Optional[float] = None, is_organic: O
     params: list = []
 
     if query:
-        sql += " AND (p.name LIKE ? OR p.description LIKE ? OR p.category LIKE ?)"
-        like = f"%{query}%"
-        params.extend([like, like, like])
+        query_clean = query.strip().lower()
+        search_terms = [query_clean]
+        
+        # If it ends with 's' (e.g. oils, honeys, nuts), add the singular form (oil, honey, nut)
+        if query_clean.endswith("s") and len(query_clean) > 3:
+            search_terms.append(query_clean[:-1])
+        # If it is singular and might match plural category (e.g. grain -> grains), add plural
+        else:
+            search_terms.append(query_clean + "s")
+            
+        or_clauses = []
+        for term in search_terms:
+            or_clauses.append("(p.name LIKE ? OR p.description LIKE ? OR p.category LIKE ?)")
+            like = f"%{term}%"
+            params.extend([like, like, like])
+            
+        sql += " AND (" + " OR ".join(or_clauses) + ")"
 
     if max_price is not None:
         sql += " AND p.price <= ?"
@@ -280,6 +294,36 @@ def is_shopping_related(user_message: str) -> bool:
         or any(cleaned.startswith(g + " ") for g in greetings)
         or any(cleaned.startswith(c + " ") for c in conversational)
     ):
+        return True
+
+    # Check if message is a simple number (e.g., selection)
+    if cleaned.isdigit():
+        return True
+
+    # Simple check for confirmation keywords
+    confirmations = {
+        "yes", "no", "sure", "ok", "okay", "cancel", "stop", "go ahead",
+        "first", "second", "third", "fourth", "last", "one", "two", "three", "four",
+        "the first", "the second", "the third", "the last", "confirm", "place", "order"
+    }
+    if cleaned in confirmations:
+        return True
+
+    # Pattern check for selectors (e.g., "#3", "number 2", "order 1", "get me 4")
+    import re
+    selection_patterns = [
+        r"^#\d+$",                   # #3
+        r"^no\.?\s*\d+$",            # no 2, no.2
+        r"^number\s*\d+$",           # number 1
+        r"^order\s*#?\s*\d+$",       # order 2, order #2
+        r"^get\s*#?\s*\d+$",         # get 3
+        r"^get\s*me\s*#?\s*\d+$",    # get me 4
+        r"^buy\s*#?\s*\d+$",         # buy 1
+        r"^checkout\s*#?\s*\d+$",    # checkout 2
+        r"^the\s+\w+\s+one$",        # the first one, the second one
+        r"^first\s+one$",            # first one
+    ]
+    if any(re.match(pattern, cleaned) for pattern in selection_patterns):
         return True
 
     prompt = (
