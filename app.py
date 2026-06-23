@@ -34,6 +34,116 @@ def invoke_agent_safely(messages: list) -> str:
 # ---------------------------------------------------------------------------
 st.set_page_config(page_title="AI Shopping Assistant", page_icon="🛒", layout="wide")
 
+# Inject Custom CSS for premium design and user experience
+st.markdown(
+    """
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+    /* Global Typography & Colors */
+    html, body, [class*="css"], .stApp {
+        font-family: 'Outfit', sans-serif !important;
+        background-color: #0b0f19 !important;
+        color: #f1f5f9 !important;
+    }
+
+    /* Gradient Title */
+    h1 {
+        font-weight: 700 !important;
+        background: linear-gradient(135deg, #8b5cf6 0%, #f472b6 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.1rem !important;
+    }
+
+    /* Subtitle styling */
+    .stCaption {
+        color: #94a3b8 !important;
+        font-size: 1.05rem !important;
+        font-weight: 400 !important;
+    }
+
+    /* Sidebar gradient */
+    [data-testid="stSidebar"] {
+        background-image: linear-gradient(180deg, #111827 0%, #030712 100%) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
+    }
+
+    /* Chat bubble container design (Glassmorphic) */
+    [data-testid="stChatMessage"] {
+        background-color: rgba(17, 24, 39, 0.7) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-radius: 16px !important;
+        padding: 1.2rem !important;
+        margin-bottom: 1rem !important;
+        box-shadow: 0 10px 30px 0 rgba(0, 0, 0, 0.2) !important;
+        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+    }
+
+    [data-testid="stChatMessage"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 40px 0 rgba(0, 0, 0, 0.35) !important;
+        border-color: rgba(255, 255, 255, 0.15) !important;
+    }
+
+    /* User Chat Bubble Accent */
+    [data-testid="stChatMessage"][data-avatar="user"] {
+        background-color: rgba(139, 92, 246, 0.08) !important;
+        border-left: 4px solid #8b5cf6 !important;
+    }
+
+    /* Assistant Chat Bubble Accent */
+    [data-testid="stChatMessage"][data-avatar="assistant"] {
+        background-color: rgba(244, 114, 182, 0.05) !important;
+        border-left: 4px solid #f472b6 !important;
+    }
+
+    /* Custom Input Bar */
+    [data-testid="stChatInput"] {
+        border-radius: 12px !important;
+        background-color: #1f2937 !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25) !important;
+    }
+
+    /* Gradient buttons with glowing hover effect */
+    div.stButton > button {
+        background: linear-gradient(135deg, #8b5cf6 0%, #f472b6 100%) !important;
+        color: #ffffff !important;
+        border: none !important;
+        padding: 0.6rem 1.5rem !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.5px !important;
+        box-shadow: 0 4px 14px 0 rgba(139, 92, 246, 0.3) !important;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        width: 100% !important;
+    }
+
+    div.stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px 0 rgba(139, 92, 246, 0.5) !important;
+    }
+
+    /* Dashed Upload Frame */
+    div[data-testid="stFileUploader"] {
+        background-color: rgba(17, 24, 39, 0.6) !important;
+        border: 2px dashed rgba(255, 255, 255, 0.08) !important;
+        border-radius: 12px !important;
+        padding: 1.2rem !important;
+    }
+
+    div[data-testid="stFileUploader"]:hover {
+        border-color: #8b5cf6 !important;
+        background-color: rgba(17, 24, 39, 0.8) !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("🛒 AI Shopping Assistant")
 st.caption("Tell me what you want — I'll search, rate, and order the best match for you.")
 
