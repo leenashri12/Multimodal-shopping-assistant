@@ -1,94 +1,90 @@
-# 🛒 AI Shopping Assistant
+# AI Shopping Assistant
 
-An intelligent, AI-powered e-commerce shopping assistant web application built with **Streamlit**, **LangChain**, and **Groq**. 
-
-This application allows users to search for products in a local database using text queries or by uploading images (multimodal vision search). The assistant can also check product ratings and place orders (writes directly to the SQLite database).
+This is a local Python project that implements a basic AI shopping assistant using Streamlit, LangChain, and Groq LLMs. It features product searches, customer ratings, simulated order placement, user preferences memory, and policy lookups using local Vector RAG.
 
 ---
 
-## 🚀 Features
+## 📦 What is in the Project
 
-- **Text Chat Interface**: Ask for products using natural language (e.g., *"I want organic honey under $15 with a 4+ rating"*).
-- **Shop by Image (Vision)**: Upload an image of a product, and the assistant will analyze it using a multimodal vision model to search the store for matching items.
-- **Rating Lookup**: Automatically retrieves average reviews and ratings for matched products.
-- **Simulated Checkout**: Place orders directly through the chat. The assistant will ask for confirmation before modifying the database.
-- **Persistent Personalization**: Automatically remembers user preferences (such as organic preferences or price limits) across sessions.
-- **Order History Memory**: Lets you query and view all your previously placed orders by asking *"what have I ordered before?"*.
-- **Input Guardrails**: Intercepts and politely redirects off-topic queries (e.g., poetry, general knowledge) to protect the LLM and prevent token wastage.
+The codebase consists of:
+
+### 1. Database & Catalog
+*   **SQLite Database (`store.db`)**: Stores catalog items, customer reviews, order logs, and user preferences.
+*   **Products Catalog**: Features 32 items across categories like honey, cooking oils, nuts, grains, tea, coffee, snacks, and milk alternatives.
+*   **Customer Reviews**: Contains simulated reviews used to calculate average star ratings for products.
+
+### 2. Search & Retrieval (RAG)
+*   **Unstructured Knowledge (`store_info.txt`)**: A text file containing store policies (returns, shipping) and product care/storage instructions.
+*   **Vector Search Index (`faiss_index/`)**: A local vector database built using FAISS and the `all-MiniLM-L6-v2` sentence-transformer model to search the policies text.
+
+### 3. AI Agent & Guardrails
+*   **Text Agent (`shopping_agent.py`)**: Uses Groq's Qwen 32B model to reason about user input and call appropriate database/vector tools.
+*   **Vision search**: Uses Llama 17B vision model to describe uploaded product images and find similar items in the catalog.
+*   **Input Guardrail**: A simple Python wrapper that filters out off-topic messages (like general knowledge or math queries) while fast-tracking greetings and order selections.
+
+### 4. Frontend Interface
+*   **Streamlit Web App (`app.py`)**: A chat web interface styled with custom CSS (glassmorphism chat bubbles, Outfit font, and slate color styling).
+
+### 5. Automated Evaluation
+*   **Evals Runner (`run_evals.py`)**: A script that runs test queries through the agent to check if the correct tools are invoked and responses meet format guidelines.
 
 ---
 
-## 🛠️ Tech Stack
-
-- **Frontend UI**: [Streamlit](https://streamlit.io/)
-- **AI Agent Framework**: [LangChain](https://www.langchain.com/)
-- **LLM Provider**: [Groq](https://groq.com/)
-  - **Text Agent Model**: `qwen/qwen3-32b`
-  - **Vision/Image Search Model**: `meta-llama/llama-4-scout-17b-16e-instruct`
-- **Database**: SQLite (local `store.db` file)
+## 🛠️ Requirements & Libraries
+Make sure you have Python 3.10+ installed. The dependencies used are:
+*   `streamlit`
+*   `python-dotenv`
+*   `langchain` / `langchain-core` / `langchain-community`
+*   `langchain-groq` (to interface with Qwen & Llama models)
+*   `faiss-cpu` (for local vector retrieval)
+*   `sentence-transformers` (to create embeddings locally)
 
 ---
 
-## ⚙️ Setup & Installation
+## ⚙️ Setup & How to Run
 
-### 1. Clone the Repository
+### Step 1: Clone and install dependencies
 ```bash
-git clone <your-repository-url>
+git clone <your-repo-link>
 cd Shopping_Agent_Project
-```
-
-### 2. Create and Activate a Virtual Environment
-```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# macOS/Linux
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configure Environment Variables
-Create a `.env` file in the root directory and add your Groq API key:
+### Step 2: Configure Environment Variables
+Create a file named `.env` in the root folder and add your Groq API key:
 ```env
 GROQ_API_KEY=your_groq_api_key_here
 ```
 
-### 5. Initialize the Database
-Run the seed script to create the tables and populate them with products and reviews:
+### Step 3: Populate the Database
+Run the SQLite database initialization script:
 ```bash
 python setup_db.py
 ```
 
-### 6. Run the Streamlit Application
+### Step 4: Build the RAG Index
+Compile the local FAISS vector database from the policies text:
+```bash
+python setup_vector_db.py
+```
+
+### Step 5: Launch the Streamlit App
+Start the local web server:
 ```bash
 streamlit run app.py
 ```
 
----
-
-## 📁 File Structure
-
-- `app.py`: The Streamlit web UI with safety guardrails and rate-limit retry protection.
-- `shopping_agent.py`: Agent logic, LangChain tool definitions, preference database logic, and LLM configuration.
-- `reviews_api.py`: Python interface to query product reviews from the SQLite database.
-- `setup_db.py`: Database initialization script containing sample products, reviews, and preference table creations.
-- `run_evals.py`: Automated evaluation script for testing tool call accuracy and response quality using an LLM-as-judge with rate-limit recovery.
-- `resources/`: Folder containing example images for image search.
-- `.gitignore`: Specifies files that Git should ignore (e.g., virtual environments, database files, and `.env` files containing API keys).
-- `requirements.txt`: Python package dependencies.
-
----
-
-## 🧪 Running Evaluations
-
-To run the automated evaluation test suite verifying tool call accuracy and response quality:
+### Step 6: (Optional) Run Evaluations
+To verify tool-calling routing and formatting:
 ```bash
 python run_evals.py
 ```
 
+---
+
+## 📁 Key File Descriptions
+*   `app.py`: Streamlit frontend layout, guardrails, and message loops.
+*   `shopping_agent.py`: LangChain tools, LLM configs, database helpers, and prompt rules.
+*   `setup_vector_db.py`: Scripts to parse `store_info.txt`, embed text, and save the local FAISS index.
+*   `store_info.txt`: Text guidelines for returns, shipping, and product care.
+*   `reviews_api.py`: Python module to read ratings from the SQLite DB.
