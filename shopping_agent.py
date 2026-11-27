@@ -16,8 +16,8 @@ load_dotenv()
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "store.db")
 
-llm = ChatGroq(model="qwen/qwen3-32b", temperature=0, max_retries=6)
-vision_llm = ChatGroq(model="meta-llama/llama-4-scout-17b-16e-instruct", temperature=0)
+llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0, max_retries=6)
+vision_llm = ChatGroq(model="qwen/qwen3.8-27b", temperature=0)
 
 # LangChain FAISS and HuggingFaceEmbeddings are lazy-imported to speed up Streamlit re-execution
 
